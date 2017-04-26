@@ -1,0 +1,72 @@
+﻿@{
+    ViewBag.Title = "Facebook login";
+}
+
+<div class="jumbotron">
+    <h1>Facebook login </h1>
+</div>
+
+<div class="row">
+	<div class="col-md-12">
+
+		@*<div class="fb-login-button"
+			 data-max-rows="1" 
+			 data-size="large"
+			 data-button-type="login_with"
+			 data-show-faces="false"
+			 data-auto-logout-link="false"
+			 data-use-continue-as="true"
+			 scope="public_profile,email,manage_pages"
+			 onlogin="checkLoginState();">
+		</div>*@
+		<button id="btnLogin" onclick="faceBookLogin()" class="col-md-2">Entrar com Facebook</button>
+	</div>
+
+</div>
+<div class="row">
+	<div id="status" class="col-md-12">
+	</div>
+</div>
+<div class="row">
+	<div id="pagesContainer" class="col-md-8">
+	</div>
+</div>
+<div class="row">
+	<div class="col-md-4">
+		<button id="btnSubscribe" style="display:none" onclick="btnSubscribeOnclick()">Associar Página</button>
+	</div>
+</div>
+
+@section scripts {
+	@Scripts.Render("~/bundles/sitehome")
+}
+
+@section facebookLogin {
+<div id="fb-root"></div>
+<script type="text/javascript">
+
+	window.fbAsyncInit = function () {
+		FB.init({
+			appId: '@System.Configuration.ConfigurationManager.AppSettings["facebook_app_id"]',
+			cookie: true,  // enable cookies to allow the server to access the session
+			xfbml: true,
+			status: true,
+			version: '@System.Configuration.ConfigurationManager.AppSettings["facebook_api_version"]'
+		});
+		//FB.AppEvents.logPageView();
+
+		FB.getLoginStatus(function (response) {
+			statusChangeCallback(response);
+		});
+	};
+
+	// Load the SDK asynchronously
+	(function(d, s, id) {
+		var js, fjs = d.getElementsByTagName(s)[0];
+		if (d.getElementById(id)) return;
+		js = d.createElement(s); js.id = id;
+		js.src = "//connect.facebook.net/pt_BR/sdk.js#xfbml=1&version=@System.Configuration.ConfigurationManager.AppSettings["facebook_api_version"]";
+		fjs.parentNode.insertBefore(js, fjs);
+	}(document, 'script', 'facebook-jssdk'));
+</script>
+}
