@@ -16,6 +16,7 @@ namespace WebHookLeads.Controllers
 	public class FacebookController : Controller
 	{
 		private JObject _leadsUpdate;
+		private AuthResponseVm _authResponseVm;
 
 		[HttpGet]
 		public Task<string> Leads()
@@ -70,7 +71,7 @@ namespace WebHookLeads.Controllers
 		public JsonResult StoreLoginResponse(AuthResponseVm authResponseVm)
 		{
 			// do the logic to save the acces token 
-			Session["authResponseVm"] = authResponseVm;
+			_authResponseVm = authResponseVm;
 			generateLongLivedToken();
 			var ret = base.Json(new { result = new { sucess = true } });
 			return ret;
@@ -78,16 +79,16 @@ namespace WebHookLeads.Controllers
 
 		private void GetLeadInfo()
 		{
-			var client = new System.Net.Http.HttpClient();
-			var apiversion = ConfigurationManager.AppSettings["facebook_api_version"];
-			var leadsIds = _leadsUpdate["entry"].Select(a => a["changes"]).Children().ToList().Where(x => x["field"].ToString() == "leadgen").Select(k => k["value"]["leadgen_id"].ToString());
+			var client			= new System.Net.Http.HttpClient();
+			var apiversion		= ConfigurationManager.AppSettings["facebook_api_version"];
+			var leadsIds		= _leadsUpdate["entry"].Select(a => a["changes"]).Children().ToList().Where(x => x["field"].ToString() == "leadgen").Select(k => k["value"]["leadgen_id"].ToString());
 
-
-			var baseAddress = $"https://graph.facebook.com/{apiversion}/";
+			var baseAddress		= $"https://graph.facebook.com/{apiversion}/";
 			foreach (var item in leadsIds)
 			{
-				var token = base.HttpContext.Application["longLivedToken"].ToString();
-				var a = client.GetAsync(baseAddress + item + $"?access_token={token}");
+				// TODO: retrieve this token from database based on form_id field, passed by webhook.
+				var token		= base.HttpContext.Application["longLivedToken"].ToString();
+				var a			= client.GetAsync(baseAddress + item + $"?access_token={token}");
 				if (a.Result.IsSuccessStatusCode)
 				{
 					var leadinfo =  a.Result.Content.ReadAsStringAsync();
@@ -104,17 +105,28 @@ namespace WebHookLeads.Controllers
 
 		private void generateLongLivedToken()
 		{
-			var client					= new System.Net.Http.HttpClient();
-			var appId					= ConfigurationManager.AppSettings["facebook_app_id"];
-			var appSecret				= ConfigurationManager.AppSettings["facebook_app_secret"];
-			var shortLivedToken			= (Session["authResponseVm"] as AuthResponseVm).accessToken;
-			var urlRequest				= $"https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id={appId}&client_secret={appSecret}&fb_exchange_token={shortLivedToken}";
-			var ret						= client.GetStringAsync(urlRequest);
-			var res						= ret.Result;
-			var obj						= JObject.Parse(res);
-			base.HttpContext.Application.Add("longLivedToken", obj["access_token"].Value<string>());
-			//Session["longLivedToken"]	= obj["access_token"].Value<string>();
-			System.Diagnostics.Trace.TraceInformation($"Json lonlived token {res}");
+			try
+			{
+				var client			= new System.Net.Http.HttpClient();
+				var appId			= ConfigurationManager.AppSettings["facebook_app_id"];
+				var appSecret		= ConfigurationManager.AppSettings["facebook_app_secret"];
+				var shortLivedToken = _authResponseVm.accessToken;
+				var urlRequest		= $"https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id={appId}&client_secret={appSecret}&fb_exchange_token={shortLivedToken}";
+				System.Diagnostics.Trace.TraceInformation($"urlRequest: {urlRequest}");
+				var ret				= client.GetStringAsync(urlRequest);
+				var res				= ret.Result;
+				var obj				= JObject.Parse(res);
+				
+				// TODO: the correct way is save this token in database
+				System.Diagnostics.Trace.TraceInformation($"userId: {_authResponseVm.userID}");
+				base.HttpContext.Application.Add($"longLivedToken", obj["access_token"].Value<string>());
+				System.Diagnostics.Trace.TraceInformation($"Json longlived token {res}");
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Trace.TraceError($"Exceção ao gerar long lived token: {ex.Message} {Environment.NewLine} StackTrace: {ex.StackTrace}");
+				throw;
+			}
 		}
 	}
 }
