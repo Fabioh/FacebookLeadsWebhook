@@ -10,6 +10,7 @@ using System.Web.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using WebHookLeads.Models.Facebook;
+using Nr = NewRelic.Api.Agent;
 
 namespace WebHookLeads.Controllers
 {
@@ -33,7 +34,7 @@ namespace WebHookLeads.Controllers
 								&& hub_verify_token.ToLower() == ConfigurationManager.AppSettings["facebook_webhook_sub"])
 					{
 						//System.Diagnostics.Trace.TraceError($"Faceboo reconheceu com sucesso o webhook hub_challenge: {hub_challenge}");
-						System.Diagnostics.Trace.TraceInformation($"Faceboo reconheceu com sucesso o webhook hub_challenge: {hub_challenge}");
+						System.Diagnostics.Trace.TraceInformation($"Facebook reconheceu com sucesso o webhook hub_challenge: {hub_challenge}");
 						return Task.FromResult(hub_challenge);
 					}
 					else
@@ -55,25 +56,45 @@ namespace WebHookLeads.Controllers
 		[HttpPost, ActionName("Leads")]
 		public Task<HttpStatusCodeResult> LeadsPoast()
 		{
-			var req					= Request.InputStream;
-			req.Seek(0, System.IO.SeekOrigin.Begin);
-			string json				= new StreamReader(req).ReadToEnd();
-			_leadsUpdate			= JObject.Parse(json);
-			System.Diagnostics.Trace.TraceInformation($"JSON recebido do Facebook: {json}");
+			try
+			{
+				var req			= Request.InputStream;
+				req.Seek(0, System.IO.SeekOrigin.Begin);
+				string json		= new StreamReader(req).ReadToEnd();
+				_leadsUpdate	= JObject.Parse(json);
+				System.Diagnostics.Trace.TraceInformation($"JSON recebido do Facebook: {json}");
+				var dic = new Dictionary<string, object>();
+				//{ new KeyValuePair<string, object>("leadUpdate", _leadsUpdate)  };
+				dic.Add("leadUpdate", _leadsUpdate);
+				//Nr.NewRelic.RecordCustomEvent("LeadUpdateResievedSucess", dic );
 
-			GetLeadInfo();
-
-			var ret					= new HttpStatusCodeResult(HttpStatusCode.OK);
-			return Task.FromResult<HttpStatusCodeResult>(ret);
+				GetLeadInfo();
+				var ret			= new HttpStatusCodeResult(HttpStatusCode.OK);
+				return Task.FromResult<HttpStatusCodeResult>(ret);
+			}
+			catch (Exception ex)
+			{
+				Nr.NewRelic.NoticeError(ex);
+				throw;
+			}
 		}
 
 		[HttpPost]
-		public JsonResult StoreLoginResponse(AuthResponseVm authResponseVm)
+		public ActionResult StoreLoginResponse(AuthResponseVm authResponseVm)
 		{
 			// do the logic to save the acces token 
+			ActionResult ret;
 			_authResponseVm = authResponseVm;
-			generateLongLivedToken();
-			var ret = base.Json(new { result = new { sucess = true } });
+			try
+			{
+				generateLongLivedToken();
+				ret = base.Json(new { result = new { sucess = true } });
+			}
+			catch (Exception)
+			{
+				ret = base.Json(new { result = new { sucess = false } });
+				throw;
+			}
 			return ret;
 		}
 
@@ -84,20 +105,28 @@ namespace WebHookLeads.Controllers
 			var leadsIds		= _leadsUpdate["entry"].Select(a => a["changes"]).Children().ToList().Where(x => x["field"].ToString() == "leadgen").Select(k => k["value"]["leadgen_id"].ToString());
 
 			var baseAddress		= $"https://graph.facebook.com/{apiversion}/";
-			foreach (var item in leadsIds)
+			try
 			{
-				// TODO: retrieve this token from database based on form_id field, passed by webhook.
-				var token		= base.HttpContext.Application["longLivedToken"].ToString();
-				var a			= client.GetAsync(baseAddress + item + $"?access_token={token}");
-				if (a.Result.IsSuccessStatusCode)
+				foreach (var item in leadsIds)
 				{
-					var leadinfo =  a.Result.Content.ReadAsStringAsync();
-					System.Diagnostics.Trace.TraceInformation("Informações do lead json " + leadinfo.Result);
+					// TODO: retrieve this token from database based on form_id field, passed by webhook.
+					var token	= base.HttpContext.Application["longLivedToken"].ToString();
+					var a		= client.GetAsync(baseAddress + item + $"?access_token={token}");
+					if (a.Result.IsSuccessStatusCode)
+					{
+						var leadinfo = a.Result.Content.ReadAsStringAsync();
+						System.Diagnostics.Trace.TraceInformation("Informações do lead json " + leadinfo.Result);
+					}
+					else
+					{
+						System.Diagnostics.Trace.TraceError("Deu ruim na hoara de ler os dados do lead");
+					}
 				}
-				else
-				{
-					System.Diagnostics.Trace.TraceError("Deu ruim na hoara de ler os dados do lead");
-				}
+			}
+			catch (Exception ex)
+			{
+				Nr.NewRelic.NoticeError(ex);
+				throw;
 			}
 			
 			
@@ -125,6 +154,7 @@ namespace WebHookLeads.Controllers
 			catch (Exception ex)
 			{
 				System.Diagnostics.Trace.TraceError($"Exceção ao gerar long lived token: {ex.Message} {Environment.NewLine} StackTrace: {ex.StackTrace}");
+				Nr.NewRelic.NoticeError(ex);
 				throw;
 			}
 		}

@@ -2,19 +2,8 @@
 	FB.getLoginStatus(function (response) {
 		FB.login(function (response) {
 			statusChangeCallback(response);
-			/*
-			if (response.status === 'connected') {
-				console.log('conectado com sucesso');
-				testAPI();
-				havePermissionToUserPages();
-			} else {
-				console.log('Não foi possivel connectar')
-			}
-			*/
 		}, { scope: 'public_profile, email, manage_pages' });
 	}, true);
-
-
 }
 
 // This is called with the results from from FB.getLoginStatus().
