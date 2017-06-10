@@ -53,7 +53,7 @@ namespace WebHookLeads.Controllers
 		}
 
 		[HttpPost, ActionName("Leads")]
-		public Task<HttpStatusCodeResult> LeadsPoast()
+		public Task<HttpStatusCodeResult> LeadsPost()
 		{
 			var req					= Request.InputStream;
 			req.Seek(0, System.IO.SeekOrigin.Begin);
